@@ -57,6 +57,13 @@ TEST(ExecQueryTest, selectOneRow)
     EXPECT_TRUE(result.eof());
 }
 
+TEST(DbTest, minimal)
+{
+    CppSQLite3DB db;
+    db.open(":memory:");
+    db.close();
+}
+
 TEST(DbTest, openNonExistentFileInReadOnly_ShouldThrow)
 {
     CppSQLite3DB db;
