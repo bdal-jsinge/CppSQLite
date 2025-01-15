@@ -35,6 +35,7 @@ add_test(NAME cppSqliteTest COMMAND cppSqliteTest)
 
 target_link_libraries(cppSqliteTest
     ${CMAKE_PROJECT_NAME}
+    fmt::fmt
     GTest::gtest_main
 )
 
@@ -51,6 +52,7 @@ add_test(NAME OutOfMemoryTest COMMAND OutOfMemoryTest)
 
 target_link_libraries(OutOfMemoryTest
     ${CMAKE_PROJECT_NAME}
+    fmt::fmt
     GTest::gtest_main
 )
 
@@ -69,7 +71,7 @@ install(TARGETS ${CMAKE_PROJECT_NAME}
         INCLUDES DESTINATION include)
         
 install(FILES CppSQLite3.h TYPE INCLUDE)
-if(MSVC)
+if(MSVC AND BUILD_SHARED_LIBS)
     install(FILES $<TARGET_PDB_FILE:${PROJECT_NAME}> DESTINATION bin OPTIONAL)
 endif()
 install(FILES LICENSE DESTINATION .)

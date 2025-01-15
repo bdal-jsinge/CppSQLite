@@ -3,85 +3,152 @@
  * Developed by Rob Groves <rob.groves@btinternet.com>
  * Maintained by NeoSmart Technologies <http://neosmart.net/>
  * See LICENSE file for copyright and license info
-*/
+ */
 
 #ifndef CppSQLite3_H
 #define CppSQLite3_H
 
-#include <sqlite3.h>
 #include <cstdio>
 #include <cstring>
+#include <sqlite3.h>
 
 #include <stdexcept>
 
 #define CPPSQLITE_ERROR 1000
 
-using CppSQLite3ErrorHandler = void (*)(int, const std::string&, const std::string&);
+/**
+ * @brief CppSQLite3StringView defines a very basic string view and can be constructed from C-style strings and
+ * std::strings.
+ * Unlike std::string_view, It doesn't store a size and input strings need to be null-terminated and UTF-8 encoded.
+ * Unlike std::string_view, it can safely be created from a nullptr.
+ */
+class CppSQLite3StringView
+{
+public:
+    CppSQLite3StringView(const std::string& str) : str_(str.c_str()) // implicitly converts from std::string
+    {
+    }
+
+    CppSQLite3StringView(const char* str) : str_(str) // implicitly converts from C-style strings
+    {
+    }
+
+    constexpr const char* c_str() const
+    {
+        return str_;
+    }
+
+    operator std::string_view() const
+    {
+        return str_ == nullptr ? std::string_view() : std::string_view(str_);
+    }
+
+private:
+    const char* str_ = nullptr;
+};
+
+
+inline bool operator==(CppSQLite3StringView lhs, CppSQLite3StringView rhs) noexcept
+{
+    return std::string_view(lhs.c_str()) == std::string_view(rhs.c_str());
+}
+
+inline bool operator!=(CppSQLite3StringView lhs, CppSQLite3StringView rhs) noexcept
+{
+    return std::string_view(lhs.c_str()) != std::string_view(rhs.c_str());
+}
+
+inline bool operator<(CppSQLite3StringView lhs, CppSQLite3StringView rhs) noexcept
+{
+    return std::string_view(lhs.c_str()) < std::string_view(rhs.c_str());
+}
+
+struct CppSQLite3LogLevel
+{
+    enum Level
+    {
+        VERBOSE,
+        INFO,
+        WARNING,
+        ERROR
+    } code;
+    std::string_view name;
+
+    explicit CppSQLite3LogLevel(Level level);
+};
+
+using CppSQLite3ErrorHandler = void (*)(int /*sqlite3_error_code*/, std::string_view /* message */,
+                                        std::string_view /* context */);
+using CppSQLite3LogHandler = void (*)(CppSQLite3LogLevel /*level*/, std::string_view /*message */);
 
 
 class CppSQLite3Exception : public std::runtime_error
 {
 public:
+    CppSQLite3Exception(const int nErrCode, const std::string& errorMessage);
 
-    CppSQLite3Exception(const int nErrCode,
-                    const std::string &errorMessage);
-
-    const int errorCode() const { return mnErrCode; }
+    const int errorCode() const
+    {
+        return mnErrCode;
+    }
 
     static std::string_view errorCodeAsString(int nErrCode);
 
 private:
-
     int mnErrCode;
 };
 
+struct CppSQLite3Config
+{
+    CppSQLite3Config();
+    sqlite3* db;
+    CppSQLite3ErrorHandler errorHandler;
+    CppSQLite3LogHandler logHandler;
+    bool enableVerboseLogging = false;
+    void log(CppSQLite3LogLevel::Level level, CppSQLite3StringView message);
+};
 
 class CppSQLite3Query
 {
 public:
-
     CppSQLite3Query();
 
     CppSQLite3Query(CppSQLite3Query&& rQuery);
 
-    CppSQLite3Query(sqlite3* pDB,
-                sqlite3_stmt* pVM,
-                CppSQLite3ErrorHandler handler,
-                bool bEof,
-                bool bOwnVM=true);
+    CppSQLite3Query(const CppSQLite3Config& config, sqlite3_stmt* pVM, bool bEof, bool bOwnVM = true);
 
-    CppSQLite3Query& operator=(CppSQLite3Query &&rQuery);
+    CppSQLite3Query& operator=(CppSQLite3Query&& rQuery);
 
     virtual ~CppSQLite3Query();
 
     int numFields() const;
 
-    int fieldIndex(const char* szField) const;
+    int fieldIndex(CppSQLite3StringView field) const;
     const char* fieldName(int nCol) const;
 
     const char* fieldDeclType(int nCol) const;
     int fieldDataType(int nCol) const;
 
     const char* fieldValue(int nField) const;
-    const char* fieldValue(const char* szField) const;
+    const char* fieldValue(CppSQLite3StringView field) const;
 
-    int getIntField(int nField, int nNullValue=0) const;
-    int getIntField(const char* szField, int nNullValue=0) const;
+    int getIntField(int nField, int nNullValue = 0) const;
+    int getIntField(CppSQLite3StringView field, int nNullValue = 0) const;
 
-    long long getInt64Field(int nField, long long nNullValue=0) const;
-    long long getInt64Field(const char* szField, long long nNullValue=0) const;
+    long long getInt64Field(int nField, long long nNullValue = 0) const;
+    long long getInt64Field(CppSQLite3StringView field, long long nNullValue = 0) const;
 
-    double getFloatField(int nField, double fNullValue=0.0) const;
-    double getFloatField(const char* szField, double fNullValue=0.0) const;
+    double getFloatField(int nField, double fNullValue = 0.0) const;
+    double getFloatField(CppSQLite3StringView field, double fNullValue = 0.0) const;
 
-    const char* getStringField(int nField, const char* szNullValue="") const;
-    const char* getStringField(const char* szField, const char* szNullValue="") const;
+    const char* getStringField(int nField, const char* szNullValue = "") const;
+    const char* getStringField(CppSQLite3StringView field, const char* szNullValue = "") const;
 
     const unsigned char* getBlobField(int nField, int& nLen) const;
-    const unsigned char* getBlobField(const char* szField, int& nLen) const;
+    const unsigned char* getBlobField(CppSQLite3StringView field, int& nLen) const;
 
     bool fieldIsNull(int nField) const;
-    bool fieldIsNull(const char* szField) const;
+    bool fieldIsNull(CppSQLite3StringView field) const;
 
     bool eof() const;
 
@@ -90,77 +157,23 @@ public:
     void finalize();
 
 private:
-
     void checkVM() const;
 
-    sqlite3* mpDB;
+    CppSQLite3Config mConfig;
     sqlite3_stmt* mpVM;
     bool mbEof;
     int mnCols;
     bool mbOwnVM;
-    CppSQLite3ErrorHandler mfErrorHandler;
 };
-
-
-class CppSQLite3Table
-{
-public:
-
-    CppSQLite3Table();
-
-    CppSQLite3Table(CppSQLite3Table &&rTable);
-
-    CppSQLite3Table(char** paszResults, int nRows, int nCols);
-
-    virtual ~CppSQLite3Table();
-
-    CppSQLite3Table& operator=(CppSQLite3Table &&rTable);
-
-    int numFields() const;
-
-    int numRows() const;
-
-    const char* fieldName(int nCol) const;
-
-    const char* fieldValue(int nField) const;
-    const char* fieldValue(const char* szField) const;
-
-    int getIntField(int nField, int nNullValue=0) const;
-    int getIntField(const char* szField, int nNullValue=0) const;
-
-    double getFloatField(int nField, double fNullValue=0.0) const;
-    double getFloatField(const char* szField, double fNullValue=0.0) const;
-
-    const char* getStringField(int nField, const char* szNullValue="") const;
-    const char* getStringField(const char* szField, const char* szNullValue="") const;
-
-    bool fieldIsNull(int nField) const;
-    bool fieldIsNull(const char* szField) const;
-
-    void setRow(int nRow);
-
-    void finalize();
-
-private:
-
-    void checkResults() const;
-
-    int mnCols;
-    int mnRows;
-    int mnCurrentRow;
-    char** mpaszResults;
-};
-
 
 class CppSQLite3Statement
 {
 public:
-
     CppSQLite3Statement();
 
-    CppSQLite3Statement(CppSQLite3Statement &&rStatement);
+    CppSQLite3Statement(CppSQLite3Statement&& rStatement);
 
-    CppSQLite3Statement(sqlite3* pDB, sqlite3_stmt* pVM, CppSQLite3ErrorHandler handler);
+    CppSQLite3Statement(const CppSQLite3Config& config, sqlite3_stmt* pVM);
 
     virtual ~CppSQLite3Statement();
 
@@ -170,7 +183,7 @@ public:
 
     CppSQLite3Query execQuery();
 
-    void bind(int nParam, const char* szValue);
+    void bind(int nParam, CppSQLite3StringView value);
     void bind(int nParam, const int nValue);
     void bind(int nParam, const long long nValue);
     void bind(int nParam, const double dwValue);
@@ -182,22 +195,22 @@ public:
     void finalize();
 
 private:
-
     void checkDB() const;
     void checkVM() const;
     void checkReturnCode(int returnCode, const char* context);
 
-    sqlite3* mpDB;
+    CppSQLite3Config mConfig;
     sqlite3_stmt* mpVM;
-    CppSQLite3ErrorHandler mfErrorHandler;
 };
 
 
 class CppSQLite3DB
 {
 public:
-
     CppSQLite3DB();
+
+    CppSQLite3DB(const CppSQLite3DB& db) = delete;
+    CppSQLite3DB& operator=(const CppSQLite3DB& db) = delete;
 
     virtual ~CppSQLite3DB();
 
@@ -206,49 +219,58 @@ public:
      * @param szFile the filename of the database
      * @param flags the SQLITE_OPEN_* flags that are passed on to the sqlite3_open_v2 call
      */
-    void open(const char* szFile, int flags=SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+    void open(CppSQLite3StringView fileName, int flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
 
     void close();
 
+    /**
+     * @brief enableVerboseLogging enables logging of all SQL statements & queries
+     */
+    void enableVerboseLogging(bool enable);
+
     bool isOpened() const;
 
-    bool tableExists(const char* szTable);
+    bool tableExists(CppSQLite3StringView table);
 
-    int execDML(const char* szSQL);
+    int execDML(CppSQLite3StringView szSQL);
 
-    CppSQLite3Query execQuery(const char* szSQL);
+    CppSQLite3Query execQuery(CppSQLite3StringView szSQL);
 
-    int execScalar(const char* szSQL);
-
-    [[deprecated("The underlying sqlite3 calls are only available for legacy reasons and not recommended. Use execQuery instead.")]]
-    CppSQLite3Table getTable(const char* szSQL);
+    int execScalar(CppSQLite3StringView szSQL);
 
     CppSQLite3Statement compileStatement(const char* szSQL);
 
     sqlite_int64 lastRowId() const;
 
-    void interrupt() { sqlite3_interrupt(mpDB); }
+    void interrupt()
+    {
+        sqlite3_interrupt(mConfig.db);
+    }
 
     void setBusyTimeout(int nMillisecs);
 
-    void setErrorHandler(CppSQLite3ErrorHandler h) {
-        mfErrorHandler = h;
+    void setErrorHandler(CppSQLite3ErrorHandler h);
+
+    void setLogHandler(CppSQLite3LogHandler h);
+
+    static const char* SQLiteVersion()
+    {
+        return SQLITE_VERSION;
     }
 
-    static const char* SQLiteVersion() { return SQLITE_VERSION; }
+    /**
+     * @brief performCheckpoint wraps sqlite3_wal_checkpoint_v2
+     * @param dbName name of the attached database (or empty)
+     * @param mode SQLITE_CHECKPOINT_* value
+     */
+    void performCheckpoint(CppSQLite3StringView dbName = "", int mode = SQLITE_CHECKPOINT_PASSIVE);
 
 private:
-
-    CppSQLite3DB(const CppSQLite3DB& db);
-    CppSQLite3DB& operator=(const CppSQLite3DB& db);
-
-    sqlite3_stmt* compile(const char* szSQL);
+    sqlite3_stmt* compile(CppSQLite3StringView szSQL);
 
     void checkDB() const;
-
-    sqlite3* mpDB;
+    CppSQLite3Config mConfig;
     int mnBusyTimeoutMs;
-    CppSQLite3ErrorHandler mfErrorHandler;
 };
 
 #endif

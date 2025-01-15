@@ -3,7 +3,5 @@ sqlite3/3.40.0
 gtest/1.13.0
 fmt/10.0.0
 [generators]
-cmake_find_package
-
-[imports]
-bin, *.dll -> . # Copies all dll files from packages bin folder to build folder
+CMakeDeps
+CMakeToolchain
