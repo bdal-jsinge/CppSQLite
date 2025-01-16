@@ -66,7 +66,7 @@ public:
                     mockShutdown,
                     0
         };
-        sqlite3_config(SQLITE_CONFIG_MALLOC, mem);
+        sqlite3_config(SQLITE_CONFIG_MALLOC, &mem);
     }
 
     void TearDown() {
